@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <fcntl.h>
 
 enum { PIPE_COUNT = 3};
 
@@ -66,6 +67,74 @@ static pid_t start_stage(char* const args[], int input_fd, int output_fd, int pi
     _exit(127); // immediate termination and returning "command not found"
 }
 
+// save output function
+static int save_output(int input_fd)
+{
+    int output_fd = open("result.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (output_fd == -1)
+    {
+        perror("open result.txt");
+        return 1;
+    }
+
+    char buffer[4096];
+    int result = 0;
+
+    for (;;) {
+        ssize_t bytes_read = read(input_fd, buffer, sizeof buffer);
+
+        if (bytes_read == 0)
+        {
+            break;
+        }
+
+        if (bytes_read == -1)
+        {
+            if (errno == EINTR)
+            {
+                continue;
+            }
+
+            perror("read pipeline");
+            result = 1;
+            break;
+        }
+
+        // Keep writing until the entire chunk is saved.
+        ssize_t offset = 0;
+        while (offset < bytes_read)
+        {
+            ssize_t bytes_written = write(output_fd, buffer + offset, (size_t)(bytes_read - offset));
+
+            if (bytes_written == -1)
+            {
+                if (errno == EINTR)
+                {
+                    continue;
+                }
+
+                perror("write result.txt");
+                result = 1;
+                break;
+            }
+
+            offset += bytes_written;
+        }
+
+        if (result != 0)
+        {
+            break;
+        }
+    }
+
+    if (close(output_fd) == -1)
+    {
+        perror("close result.txt");
+        return 1;
+    }
+
+    return result;
+}
 
 int main(void)
 {
@@ -101,38 +170,9 @@ int main(void)
     close_pipes(pipes, PIPE_COUNT - 1);
     close(pipes[PIPE_COUNT - 1][1]);
 
-    if (result == 0)
+    if(result == 0)
     {
-        char buffer[4096];
-
-        for (;;)
-        {
-            ssize_t bytes = read(pipes[PIPE_COUNT - 1][0], buffer, sizeof buffer);
-
-            if (bytes == 0)
-            {
-                break;
-            }
-
-            if (bytes == -1)
-            {
-                if (errno == EINTR)
-                {
-                    continue;
-                }
-
-                perror("read");
-                result = 1;
-                break;
-            }
-
-            if (fwrite(buffer, 1, (size_t)bytes, stdout) != (size_t)bytes)
-            {
-                perror("fwrite");
-                result = 1;
-                break;
-            }
-        }
+        result = save_output(pipes[PIPE_COUNT - 1][0]);
     }
 
     close(pipes[PIPE_COUNT - 1][0]);
