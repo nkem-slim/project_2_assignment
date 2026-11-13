@@ -1,4 +1,4 @@
-# Task 2 — File-copy performance
+# Task 2: File-copy performance
 
 ## Method
 
