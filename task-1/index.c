@@ -136,6 +136,83 @@ static int save_output(int input_fd)
     return result;
 }
 
+// function to reopen the file and show the frst five lines
+static int display_output(void)
+{
+    int fd = open("result.txt", O_RDONLY);
+    if (fd == -1)
+    {
+        perror("open result.txt");
+        return 1;
+    }
+
+    char buffer[4096];
+    size_t lines = 0;
+    int unfinished_line = 0;
+    int result = 0;
+
+    for (;;)
+    {
+        ssize_t bytes = read(fd, buffer, sizeof buffer);
+        if (bytes == 0)
+        {
+            break;
+        }
+
+        if (bytes == -1)
+        {
+            if (errno == EINTR)
+            {
+                continue;
+            }
+
+            perror("read result.txt");
+            result = 1;
+            break;
+        }
+
+        for (ssize_t i = 0; i < bytes; i++)
+        {
+            // Display the first five lines and count the entire file.
+            if (lines < 5 && putchar((unsigned char)buffer[i]) == EOF)
+            {
+                perror("putchar");
+                result = 1;
+                break;
+            }
+
+            unfinished_line = buffer[i] != '\n';
+            if (buffer[i] == '\n')
+            {
+                lines++;
+            }
+        }
+
+        if (result != 0)
+        {
+            break;
+        }
+    }
+
+    if (close(fd) == -1)
+    {
+        perror("close result.txt");
+        return 1;
+    }
+
+    if (result == 0)
+    {
+        if (unfinished_line && lines < 5)
+        {
+            putchar('\n');
+        }
+
+        printf("Total lines: %zu\n", lines + (size_t)unfinished_line);
+    }
+
+    return result;
+}
+
 int main(void)
 {
     int pipes[PIPE_COUNT][2];
@@ -194,6 +271,11 @@ int main(void)
         {
             result = 1;
         }
+    }
+
+    if(result == 0)
+    {
+        result = display_output();
     }
 
     return result;
