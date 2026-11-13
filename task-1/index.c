@@ -267,8 +267,24 @@ int main(void)
         {
             perror("waitpid");
             result = 1;
-        } else if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+            continue;
+        }
+
+        if (WIFEXITED(status))
         {
+            int exit_code = WEXITSTATUS(status);
+            printf("%s (PID %ld) exited with status %d\n",
+                   commands[i][0], (long)waited, exit_code);
+
+            if (exit_code != 0)
+            {
+                result = 1;
+            }
+        }
+        else if (WIFSIGNALED(status))
+        {
+            printf("%s (PID %ld) was terminated by signal %d\n",
+                   commands[i][0], (long)waited, WTERMSIG(status));
             result = 1;
         }
     }
